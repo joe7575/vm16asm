@@ -9,5 +9,4 @@
 .settings/
 
 build/
-dist/
 vm16asm.egg-info/
