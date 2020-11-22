@@ -10,3 +10,6 @@
 
 build/
 vm16asm.egg-info/
+test.py
+vm16asm/__pycache__/
+dist/vm16asm-1.0.1-py3.8.egg

@@ -482,11 +482,11 @@ def bin_file(fname, mem, fillword=0):
             lOut[-1] = "\n" + lOut[-1]
     open(dname, "wt").write(" ".join(lOut))
     
-def rom_file(fname, mem, fillword=0):
+def tbl_file(fname, mem, fillword=0):
     """
-    Generate a text block to be used as constant table for ROM chips 
+    Generate a text block to be used as constant table for testing purposes
     """
-    dname = os.path.splitext(fname)[0] + ".rom"
+    dname = os.path.splitext(fname)[0] + ".tbl"
     print(" - write %s..." % dname)
     lOut = []
     for idx, v in enumerate(mem):
@@ -531,8 +531,7 @@ def h16_file(fname, start_addr, mem):
                 add(lOut, row[i1:i2], start_addr + idx + i1)
                 i1 = i2
         idx += ROWSIZE
-    lOut.append(":0000001")
-    #print("\n".join(lOut))    
+    lOut.append(":00000FF")
     open(dname, "wt").write("\n".join(lOut))
     
 def assembler(fname):
@@ -540,14 +539,12 @@ def assembler(fname):
     print(" - read %s..." % fname)
     a = AsmPass1()
     lToken = a.run(fname)
-    #print("\n".join([str(item) for item in lToken]))
     a = AsmPass2(a.dSymbols, a.dAliases)
     lToken = a.run(lToken)
     list_file(fname, lToken)
     start_addr, mem = locater(lToken)
-    bin_file(fname, mem)
-    if "-h16" in sys.argv: h16_file(fname, start_addr, mem)
-    if "-rom" in sys.argv: rom_file(fname, mem)
+    h16_file(fname, start_addr, mem)
+    if "-tbl" in sys.argv: tbl_file(fname, mem)
     
     print("\nSymbol table:")
     items = []
@@ -563,11 +560,11 @@ def assembler(fname):
     print("Code start address: $%04X" % start_addr)
     print("Code size: $%04X/%u words\n" % (size, size))
 
-if len(sys.argv) < 2:
-    print("Syntax: vm16asm <asm-file>")
-    print("Options:")
-    print(" -h16     generate a H16 file in addition")
-    print(" -rom     generate a ROM file in addition")
-    sys.exit(0)
-        
-assembler(sys.argv[1])
+def main():
+    if len(sys.argv) < 2:
+        print("Syntax: vm16asm <asm-file>")
+        print("Options:")
+        print(" -tbl    generate a table like file in addition")
+        sys.exit(0)
+            
+    assembler(sys.argv[1])

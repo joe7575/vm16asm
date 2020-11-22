@@ -22,7 +22,7 @@ setuptools.setup(
 
     entry_points={
         'console_scripts': [
-            'vm16asm=vm16asm:assembler',
+            'vm16asm=vm16asm.assembler:main',
         ],
     },
 )
