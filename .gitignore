@@ -1,0 +1,13 @@
+*~
+*.swp
+*.bak*
+*.orig
+
+# Eclipse (CDT and LDT)
+.project
+.pydevproject 
+.settings/
+
+build/
+dist/
+vm16asm.egg-info/
