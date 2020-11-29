@@ -297,6 +297,8 @@ class AsmPass1(AsmBase):
         else:
             words = self.operand_correction(words)
             size = 1 + self.operand_size(list_get(words, 1)) + self.operand_size(list_get(words, 2))
+            if size > 2:
+                self.error("Invalid syntax '%s' (number of words > 2)" % self.line)
         return self.tokenize(size, words)    
 
     def run(self, fname):
