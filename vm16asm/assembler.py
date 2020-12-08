@@ -118,6 +118,20 @@ class AsmBase(object):
                 lOut.append(val)
         return lOut
     
+    def const_val(self, s):
+        """
+        10 bit const value like in 'sys #123' 
+        """
+        try:
+            if s[0] == "#":
+                if s[1] == "$":
+                    return int(s[2:], base=16) % 1024
+                return int(s[1:], base=10) % 1024
+            else:
+                self.error("Invalid operand in '%s'" % self.line)
+        except:
+            self.error("Invalid operand in '%s'" % self.line)
+            
     def value(self, s):
         try:
             if s[0] == "$":
@@ -129,7 +143,7 @@ class AsmBase(object):
             return int(s, base=10)
         except:
             self.error("Invalid operand in '%s'" % self.line)
-            
+
     def add_label_prefix(self, label):
         if label.islower(): # local label
             return "%u_%s" % (self.labelprefix, label)
@@ -394,7 +408,7 @@ class AsmPass2(AsmBase):
              self.error("Invalid instruction in '%s'" % self.line)
         opc1 = self.get_opcode(instr)
         if oprnd1 and opc1 < 4:
-            num = self.value(oprnd1) % 1024
+            num = self.const_val(oprnd1)
             opc2, val1 = int(num / 32), None
             opc3, val2 = int(num % 32), None
         else:

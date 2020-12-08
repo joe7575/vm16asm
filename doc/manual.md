@@ -9,7 +9,7 @@ Example "demo1.asm":
 ```assembly
 ; 7-Segement Demo v1.0
         move    A, #0
-LOOP:   out     #8, A
+LOOP:   out     #0, A
         inc     A
         and     A, #$0F
         dly
@@ -88,16 +88,14 @@ Assembler directives are used to distinguish between code and text segments, or 
 Here an example:
 
 ```assembly
-; Copy "Hello world" from code area to the screen buffer
+; Hello world for the Telewriter v1.0
 
         .code
-START:  move    X, #TEXT
-		move    Y, #$1000
-LOOP:   move    [Y]+, [X]    
-        bnze    [X]+, +LOOP
+START:  move    A, #TEXT
+        sys     #0
         halt
 
-		.org $100
+        .org $100
         .text
 TEXT:   "Hello "
         "World\0"
@@ -105,19 +103,18 @@ TEXT:   "Hello "
 
 - `.code` marks the start of a code block and is optional at the beginning of a program (code is default)
 
-- `.text` marks the start of a text block with "..." strings. `\0` is equal to the value zero and here used to terminate the copy loop.
+- `.text` marks the start of a text block with "..." strings. `\0` is equal to the value zero and here used to terminate the string for the `sys #0` command.
 - `.org` defines a memory start address. In the example above, the text characters will be stored at address 100hex and the following.
 
 The assembler output for the example above looks like:
 
 ```
-VM16 ASSEMBLER v1.0.1 (c) 2019-2020 by Joe
- - read hello.asm...
- - write hello.lst...
- - write hello.h16...
+VM16 ASSEMBLER v1.0.2 (c) 2019-2020 by Joe
+ - read /home/joachim/minetest5/mods/pdp13/examples/telewriter.asm...
+ - write /home/joachim/minetest5/mods/pdp13/examples/telewriter.lst...
+ - write /home/joachim/minetest5/mods/pdp13/examples/telewriter.h16...
 Symbol table:
  - START            = 0000
- - LOOP             = 0004
  - TEXT             = 0100
 Code start address: $0000
 Code size: $010C/268 words

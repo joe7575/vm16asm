@@ -22,15 +22,16 @@
 #  History:
 #  1.0.0  01-Dec-2019  first draft
 #  1.0.1  21-Nov-2020  Add setup
+#  1.0.2  08-Dec-2020  Change syntax for sys instruction
 
-VERSION = "1.0.1"
+VERSION = "1.0.2"
 
 
 #
 # OP-codes
 #
 Opcodes = [
-    "nop:-:-", "dly:-:-", "sys:NUM:-", "int:NUM:-",
+    "nop:-:-", "res1:CNST:-", "sys:CNST:-", "res2:CNST:-",
     "jump:ADR:-", "call:ADR:-", "ret:-:-", "halt:-:-",
     "move:DST:SRC", "xchg:DST:DST", "inc:DST:-", "dec:DST:-",
     "add:DST:SRC", "sub:DST:SRC", "mul:DST:SRC", "div:DST:SRC",
