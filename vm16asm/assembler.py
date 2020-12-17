@@ -474,7 +474,7 @@ def list_file(fname, lToken):
             addr = "%04X" % token[ADDRESS]
             code = ", ".join(["%04X" % c for c in token[OPCODES]])
             cmnt = "%s" % token[LINESTR].rstrip()
-            lOut.append("%s: %-18s %s" % (addr, code, cmnt))
+            lOut.append("%s: %-12s %s" % (addr, code, cmnt))
         elif token[LINETYPE] in [BTEXTTYPE, WTEXTTYPE]:
             addr = "%04X" % token[ADDRESS]
             code = ", ".join(["%04X" % c for c in token[OPCODES]])

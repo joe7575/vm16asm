@@ -4,26 +4,29 @@
 
 The Assembler `vm16asm`  is used to translate assembly code into a H16 file as in the following example. This assembler is not available ingame, it must be installed on your PC (Linux, macOS, and Windows). The generated H16 file can then be transfered into the game via copy/paste.
 
-Example "demo1.asm":
+Example "7segment.asm":
 
 ```assembly
-; 7-Segement Demo v1.0
-        move    A, #0
-LOOP:   out     #0, A
-        inc     A
-        and     A, #$0F
-        dly
-        dly
-        dly
-        dly
-        jump    LOOP
+; 7 segment demo v1.0
+; PDP13 7-Segment on port #0
+
+    move A, #$80    ; 'value' command
+    move B, #00     ; value in B
+
+loop:
+    add  B, #01
+    and  B, #$0F    ; values from 0 to 15
+    out #00, A
+    nop
+    nop
+    jump loop
 ```
 
-H16 file "demo1.h16":
+H16 file "7segment.h16":
 
 ```
-:8000000200C6600000828004010000F04000400
-:500080004000400040012000001
+:80000002010008020300000303000014030000F
+:6000800660000000000000012000004
 :00000FF
 ```
 
