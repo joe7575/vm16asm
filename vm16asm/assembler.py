@@ -66,21 +66,23 @@ def load_file(path, fname):
     if not os.path.exists(fname):
         print("Error: File '%s' does not exist" % fname)
         sys.exit(0)
+
+    lToken = []
     if fname not in lFileList:
         file_ref = len(lFileList)
         lFileList.append(fname)
-    lToken = []
-    lToken.append((file_ref, 0, ""))
-    lToken.append((file_ref, 0, ";################ File: %s ################" % fname))
-    for idx, line in enumerate(open(fname).readlines()):
-        # include files
-        m = reINCL.match(line)
-        if m:
-            inc_file = os.path.join(path, m.group(1))
-            print(" - import %s..." % m.group(1))
-            lToken.extend(load_file(path, inc_file))
-        else:
-            lToken.append((file_ref, idx+1, line))
+
+        lToken.append((file_ref, 0, ""))
+        lToken.append((file_ref, 0, ";################ File: %s ################" % fname))
+        for idx, line in enumerate(open(fname).readlines()):
+            # include files
+            m = reINCL.match(line)
+            if m:
+                inc_file = os.path.join(path, m.group(1))
+                print(" - import %s..." % m.group(1))
+                lToken.extend(load_file(path, inc_file))
+            else:
+                lToken.append((file_ref, idx+1, line))
     return lToken
 
 class AsmBase(object):
@@ -522,7 +524,7 @@ def com_file(fname, start_addr, mem):
         size = len(mem)
         s = struct.pack("<" + size*'H', *mem)
         open(dname, "wb").write(s)
-        return
+        return size
     print("Error: Start address must be $100 (hex)!")
     
 def h16_file(fname, start_addr, last_addr, mem):
@@ -550,6 +552,7 @@ def h16_file(fname, start_addr, last_addr, mem):
     idx = 0
     ROWSIZE = 8
     lOut = []
+    size = 0
     lOut.append(":2000001%04X%04X" % (start_addr, last_addr))
     while idx < len(mem):
         row = mem[idx:idx+ROWSIZE]
@@ -559,11 +562,12 @@ def h16_file(fname, start_addr, last_addr, mem):
             i1 = first_valid(row, i1)
             i2  = first_invalid(row, i1)
             if i1 != i2 and i1 < ROWSIZE:
-                add(lOut, row[i1:i2], start_addr + idx + i1)
+                size += add(lOut, row[i1:i2], start_addr + idx + i1)
                 i1 = i2
         idx += ROWSIZE
     lOut.append(":00000FF")
     open(dname, "wt").write("\n".join(lOut))
+    return size
     
 def assembler(fname):
     print("VM16 ASSEMBLER v%s (c) 2019-2020 by Joe\n" % VERSION)
@@ -575,9 +579,9 @@ def assembler(fname):
     list_file(fname, lToken)
     start_addr, mem, last_addr = locater(lToken)
     if "-com" in sys.argv:
-        com_file(fname, start_addr, mem)
+        size = com_file(fname, start_addr, mem)
     else:
-        h16_file(fname, start_addr, last_addr, mem)
+        size = h16_file(fname, start_addr, last_addr, mem)
     
     if "-tbl" in sys.argv: tbl_file(fname, mem)
     
@@ -591,7 +595,6 @@ def assembler(fname):
         print(" - %-16s = %04X" % (item[0], item[1]))
     print("")
  
-    size = len(mem)
     print("Code start address: $%04X" % start_addr)
     print("Last used address:  $%04X" % last_addr)
     print("Code size: $%04X/%u words\n" % (size, size))
