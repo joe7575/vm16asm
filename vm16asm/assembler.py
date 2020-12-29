@@ -435,7 +435,7 @@ class AsmPass2(AsmBase):
 def locater(lToken):
     """
     Memory allocation of the token list code.
-    Returns start-address and the array with the opcodes
+    Returns start-address, the array with the opcodes, and the last used address
     (unused memory cells are set to -1) 
     """
     l = copy(lToken)
@@ -456,7 +456,7 @@ def locater(lToken):
             for idx, val in enumerate(token[OPCODES]):
                 if mem[addr + idx] != -1: print("Warning: Memory location conflict at $%04X" % (addr + idx))
                 mem[addr + idx] = val
-    return start, mem
+    return start, mem, end-1
     
 def list_file(fname, lToken):
     """
@@ -525,7 +525,7 @@ def com_file(fname, start_addr, mem):
         return
     print("Error: Start address must be $100 (hex)!")
     
-def h16_file(fname, start_addr, mem):
+def h16_file(fname, start_addr, last_addr, mem):
     """
     Generate a H16 file for import into Minetest 
     """
@@ -550,6 +550,7 @@ def h16_file(fname, start_addr, mem):
     idx = 0
     ROWSIZE = 8
     lOut = []
+    lOut.append(":2000001%04X%04X" % (start_addr, last_addr))
     while idx < len(mem):
         row = mem[idx:idx+ROWSIZE]
         i1 = 0
@@ -572,11 +573,11 @@ def assembler(fname):
     a = AsmPass2(a.dSymbols, a.dAliases)
     lToken = a.run(lToken)
     list_file(fname, lToken)
-    start_addr, mem = locater(lToken)
+    start_addr, mem, last_addr = locater(lToken)
     if "-com" in sys.argv:
         com_file(fname, start_addr, mem)
     else:
-        h16_file(fname, start_addr, mem)
+        h16_file(fname, start_addr, last_addr, mem)
     
     if "-tbl" in sys.argv: tbl_file(fname, mem)
     
@@ -592,6 +593,7 @@ def assembler(fname):
  
     size = len(mem)
     print("Code start address: $%04X" % start_addr)
+    print("Last used address:  $%04X" % last_addr)
     print("Code size: $%04X/%u words\n" % (size, size))
 
 def main():
