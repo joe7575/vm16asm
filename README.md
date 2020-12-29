@@ -5,16 +5,13 @@ tbd
 
 ## Installation
 
-Download the file `vm16asm-x.y.z-py3-none-any.whl` from: https://github.com/joe7575/vm16asm/blob/main/dist/
+Download the file `vm16asm-1.0.3-py3-none-any.whl` from: https://github.com/joe7575/vm16asm/blob/main/dist/
 
 Install it with Python `pip`, e.g. for Ubuntu:
 
 ```
-sudo pip3 install vm16asm-x.y.z-py3-none-any.whl 
+sudo pip3 install vm16asm-1.0.3-py3-none-any.whl
 ```
-
-Hint: Use the correct version number!
-
 
 
 ## Using
@@ -43,6 +40,7 @@ Licensed under the GNU GPLv3   (See LICENSE.txt)
 ## History
 
 - 2020-11-21  v1.0.1  * First commit
-
+- 2020-12-08  v1.0.2  * Change syntax for sys instruction
+- 2020-12-28  v1.0.3  * Add export for COM files
 
 

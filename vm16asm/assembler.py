@@ -22,6 +22,7 @@ import re
 import sys
 import os
 import pprint
+import struct
 from .instructions import *
 from copy import copy
 from array import array
@@ -511,6 +512,19 @@ def tbl_file(fname, mem, fillword=0):
             lOut[-1] = "\n" + lOut[-1]
     open(dname, "wt").write(", ".join(lOut))
     
+def com_file(fname, start_addr, mem):
+    """
+    Generate a binary COM file with for J/OS
+    """
+    if start_addr == 0x100:
+        dname = os.path.splitext(fname)[0] + ".com"
+        print(" - write %s..." % dname)
+        size = len(mem)
+        s = struct.pack("<" + size*'H', *mem)
+        open(dname, "wb").write(s)
+        return
+    print("Error: Start address must be $100 (hex)!")
+    
 def h16_file(fname, start_addr, mem):
     """
     Generate a H16 file for import into Minetest 
@@ -559,7 +573,11 @@ def assembler(fname):
     lToken = a.run(lToken)
     list_file(fname, lToken)
     start_addr, mem = locater(lToken)
-    h16_file(fname, start_addr, mem)
+    if "-com" in sys.argv:
+        com_file(fname, start_addr, mem)
+    else:
+        h16_file(fname, start_addr, mem)
+    
     if "-tbl" in sys.argv: tbl_file(fname, mem)
     
     print("\nSymbol table:")
@@ -581,6 +599,7 @@ def main():
         print("Syntax: vm16asm <asm-file>")
         print("Options:")
         print(" -tbl    generate a table like file in addition")
+        print(" -com    generate a COM file instead of a H16 file")
         sys.exit(0)
             
     assembler(sys.argv[1])

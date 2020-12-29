@@ -23,8 +23,9 @@
 #  1.0.0  01-Dec-2019  first draft
 #  1.0.1  21-Nov-2020  Add setup
 #  1.0.2  08-Dec-2020  Change syntax for sys instruction
+#  1.0.3  28-Dec-2020  Add export for COM files
 
-VERSION = "1.0.2"
+VERSION = "1.0.3"
 
 
 #

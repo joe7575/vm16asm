@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="vm16asm",
-    version="1.0.2",
+    version="1.0.3",
     author="Joe",
     author_email="iauit@gmx.de",
     description="Assembler for the VM16 CPU",
