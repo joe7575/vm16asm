@@ -35,6 +35,7 @@ reSTACK = re.compile(r"\[SP\+(\$?[0-9A-Fa-fx]+)\]$")
 reINCL =  re.compile(r'^\$include +"(.+?)"')
 reEQUALS = re.compile(r"^([A-Za-z_][A-Za-z_0-9]+) *= *(\S+)")
 
+lPathList = []
 lFileList = []
 
 # Token tuple indexes
@@ -55,6 +56,21 @@ BTEXTTYPE = 2
 DATATYPE = 3
 COMMENT = 4
 
+def find_file(path, fname):
+    s = os.path.realpath(os.path.join(path, fname))
+    path = os.path.dirname(s)
+    fname = os.path.basename(s)
+    
+    if path not in lPathList:
+        lPathList.append(path)
+        
+    for path in lPathList:
+        realname = os.path.realpath(os.path.join(path, fname))
+        if os.path.exists(realname):
+            return realname
+    print("Error: File '%s' does not exist" % fname)
+    sys.exit(0)
+
 def load_file(path, fname):
     """
     Read ASM file with all include files.
@@ -63,9 +79,7 @@ def load_file(path, fname):
     """
     global lFileList
     
-    if not os.path.exists(fname):
-        print("Error: File '%s' does not exist" % fname)
-        sys.exit(0)
+    fname =  find_file(path, fname)
 
     lToken = []
     if fname not in lFileList:
@@ -111,14 +125,23 @@ class AsmBase(object):
         return lOut
     
     def byte_string(self, s):
-        list_get = lambda l, idx: l[idx] if len(l) > idx else ' '
+        def word_val(s, idx):
+            if s[idx] == "\0":
+                return 0 
+            elif idx + 1 == len(s):
+                return ord(s[idx])
+            elif s[idx+1] == "\0":
+                return ord(s[idx])
+            else:
+                return (ord(s[idx]) << 8) + ord(s[idx+1])
+    
         lOut =[]
-        s = s.replace("\\0", "\0")
+        s = s.replace("\\0", "\0\0")
         s = s.replace("\\n", "\n")
         if s[0] == '"' and s[-1] == '"':
-            for idx in range(1, len(s) - 1, 2):
-                val = ord(list_get(s,idx)) + (ord(list_get(s, idx+1)) << 8) 
-                lOut.append(val)
+            s = s[1:-1]
+            for idx in range(0, len(s), 2):
+                lOut.append(word_val(s, idx))
         return lOut
     
     def const_val(self, s):
@@ -225,7 +248,7 @@ class AsmPass1(AsmBase):
         elif words[0] == ".text":
             self.segment_type = WTEXTTYPE
             return True
-        elif words[0] == ".btext":
+        elif words[0] == ".ctext": # compressed
             self.segment_type = BTEXTTYPE
             return True
         elif words[0] == ".org" and len(words) > 1:
@@ -458,6 +481,11 @@ def locater(lToken):
             for idx, val in enumerate(token[OPCODES]):
                 if mem[addr + idx] != -1: print("Warning: Memory location conflict at $%04X" % (addr + idx))
                 mem[addr + idx] = val
+        elif token[LINETYPE] == DATATYPE:
+            addr = token[ADDRESS] - start
+            for idx, val in enumerate(token[OPCODES]):
+                if mem[addr + idx] != -1: print("Warning: Memory location conflict at $%04X" % (addr + idx))
+                mem[addr + idx] = val
     return start, mem, end-1
     
 def list_file(fname, lToken):
@@ -476,14 +504,22 @@ def list_file(fname, lToken):
         elif token[LINETYPE] == CODETYPE:
             addr = "%04X" % token[ADDRESS]
             code = ", ".join(["%04X" % c for c in token[OPCODES]])
-            cmnt = "%s" % token[LINESTR].rstrip()
-            lOut.append("%s: %-12s %s" % (addr, code, cmnt))
+            cmnt = "%s" % token[LINESTR].strip()
+            lOut.append("%s: %-12s  %s" % (addr, code, cmnt))
         elif token[LINETYPE] in [BTEXTTYPE, WTEXTTYPE]:
             addr = "%04X" % token[ADDRESS]
             code = ", ".join(["%04X" % c for c in token[OPCODES]])
             cmnt = "%s" % token[LINESTR].rstrip()
             lOut.append("%s" % cmnt)
             lOut.append("%s: %s" % (addr, code))
+        elif token[LINETYPE] == DATATYPE:
+            addr = "%04X" % token[ADDRESS]
+            code = ", ".join(["%04X" % c for c in token[OPCODES]])
+            cmnt = "%s" % token[LINESTR].rstrip()
+            lOut.append("%s" % cmnt)
+            lOut.append("%s: %s" % (addr, code))
+            
+            
     dname = os.path.splitext(fname)[0] + ".lst"
     print(" - write %s..." % dname)
     open(dname, "wt").write("\n".join(lOut))
