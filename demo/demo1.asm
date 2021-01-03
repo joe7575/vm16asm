@@ -8,9 +8,10 @@ var2 = $13F         ; local const definition
 
 START1:             ; global label
 start2:             ; local label
-exit:   jump 1000
-        jump $1000
+exit:   jump  1000
+        jump  $1000
         halt
+        brk   #$10
 
         .text       ; normal text segment (one ascii char per word)
 TEXT1:  "Hello "

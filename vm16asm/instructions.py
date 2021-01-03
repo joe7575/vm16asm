@@ -24,15 +24,16 @@
 #  1.0.1  21-Nov-2020  Add setup
 #  1.0.2  08-Dec-2020  Change syntax for sys instruction
 #  1.0.3  28-Dec-2020  Add export for COM files
+#  1.1.0  03-Jan-2021  Add 'bkr' opcode
 
-VERSION = "1.0.3"
+VERSION = "1.1.0"
 
 
 #
 # OP-codes
 #
 Opcodes = [
-    "nop:-:-", "res1:CNST:-", "sys:CNST:-", "res2:CNST:-",
+    "nop:-:-", "brk:CNST:-", "sys:CNST:-", "res2:CNST:-",
     "jump:ADR:-", "call:ADR:-", "ret:-:-", "halt:-:-",
     "move:DST:SRC", "xchg:DST:DST", "inc:DST:-", "dec:DST:-",
     "add:DST:SRC", "sub:DST:SRC", "mul:DST:SRC", "div:DST:SRC",

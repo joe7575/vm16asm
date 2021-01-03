@@ -2,6 +2,8 @@
 *.swp
 *.bak*
 *.orig
+*.h16
+*.lst
 
 # Eclipse (CDT and LDT)
 .project
