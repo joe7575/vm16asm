@@ -13,4 +13,5 @@
 build/
 vm16asm.egg-info/
 test.py
+test_srv.py
 vm16asm/__pycache__/

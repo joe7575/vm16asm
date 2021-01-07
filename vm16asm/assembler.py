@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# vm16asm - Assembler for the VM16 CPU
-# Copyright (C) 2019-2020 Joe <iauit@gmx.de>
+# vm16asm - Macro Assembler for the VM16 CPU
+# Copyright (C) 2019-2021 Joe <iauit@gmx.de>
 #
 
 # v16asm is free software: you can redistribute it and/or modify
@@ -27,27 +27,28 @@ from .instructions import *
 from copy import copy
 from array import array
 
-reLABEL = re.compile(r"^([A-Za-z_][A-Za-z_0-9]+):")
+DEST_PATH = ""
+
+reLABEL = re.compile(r"^([A-Za-z_][A-Za-z_0-9\.]+):")
 reCONST = re.compile(r"#(\$?[0-9A-Fa-fx]+)$")
 reADDR = re.compile(r"(\$?[0-9A-Fa-fx]+)$")
 reREL  = re.compile(r"([\+\-])(\$?[0-9A-Fa-fx]+)$")
 reSTACK = re.compile(r"\[SP\+(\$?[0-9A-Fa-fx]+)\]$")
 reINCL =  re.compile(r'^\$include +"(.+?)"')
-reEQUALS = re.compile(r"^([A-Za-z_][A-Za-z_0-9]+) *= *(\S+)")
-
-lPathList = []
-lFileList = []
+reMACRO_DEF = re.compile(r'^\$macro +([A-Za-z_][A-Za-z_0-9\.]+) *([0-9]?)$')
+reMACRO =  re.compile(r'^\$([A-Za-z_][A-Za-z_0-9\.]+) *(.*)$')
+reEQUALS = re.compile(r"^([A-Za-z_][A-Za-z_0-9\.]+) *= *(\S+)")
+rePARAM = re.compile(r'^\-[cls]{1,3}')
 
 # Token tuple indexes
-FILEREF = 0
+FILENAME = 0
 LINENUM = 1
 LINESTR = 2
 LINETYPE = 3
-LABELPREFIX = 4
-ADDRESS = 5
-INSTRSIZE = 6
-INSTRWORDS = 7
-OPCODES = 8
+ADDRESS = 4
+INSTRSIZE = 5
+INSTRWORDS = 6
+OPCODES = 7
 
 # Segment types
 CODETYPE = 0
@@ -56,54 +57,150 @@ BTEXTTYPE = 2
 DATATYPE = 3
 COMMENT = 4
 
-def find_file(path, fname):
-    s = os.path.realpath(os.path.join(path, fname))
-    path = os.path.dirname(s)
-    fname = os.path.basename(s)
+def outp(s, new=False):
+    if "--srv" in sys.argv:
+        outfile = DEST_PATH + "pipe.sys"
+        if new:
+            open(outfile, "w").write(s+"\n")
+        else:
+            open(outfile, "a").write(s+"\n")
+    print(s)
+
+def startswith(s, keyword):
+    return s.split(" ")[0] == keyword
     
-    if path not in lPathList:
-        lPathList.append(path)
+def parameter():
+    for item in sys.argv:
+        if rePARAM.match(item):
+            if "c" in item: sys.argv.append("--com") 
+            if "l" in item: sys.argv.append("--lst") 
+            if "s" in item: sys.argv.append("--sym") 
+    
+class Tokenizer(object):
+    """
+    Read asm-file and generate one large list of tokens (filename, lineno, line).
+    This include:
+    - import $include files
+    - expand macros
+    """
+    def __init__(self):
+        self.lPathList = []
+        self.dMacros = {}
         
-    for path in lPathList:
-        realname = os.path.realpath(os.path.join(path, fname))
-        if os.path.exists(realname):
-            return realname
-    print("Error: File '%s' does not exist" % fname)
-    sys.exit(0)
-
-def load_file(path, fname):
-    """
-    Read ASM file with all include files.
-    Function is called recursively to handle includes.
-    Return a token list with (file-ref, line-no, line-string) 
-    """
-    global lFileList
+    def error(self, filename, lineno, err):
+        outp("Error in file %s(%u):\n%s" % (filename, lineno, err))
+        sys.exit(-1)
     
-    fname =  find_file(path, fname)
-
-    lToken = []
-    if fname not in lFileList:
-        file_ref = len(lFileList)
-        lFileList.append(fname)
-
-        lToken.append((file_ref, 0, ""))
-        lToken.append((file_ref, 0, ";################ File: %s ################" % fname))
-        for idx, line in enumerate(open(fname).readlines()):
-            # include files
-            m = reINCL.match(line)
-            if m:
-                inc_file = os.path.join(path, m.group(1))
-                print(" - import %s..." % m.group(1))
-                lToken.extend(load_file(path, inc_file))
-            else:
-                lToken.append((file_ref, idx+1, line))
-    return lToken
+    def find_file(self, path, filename):
+        # Server mode needs special handling due to the lack of dirs 
+        # and the UID as file name prefix.
+        if "--srv" in sys.argv:
+            filename = path + os.path.basename(filename)
+            path, basename = filename.rsplit("_", 1)
+            path = path + "_"
+            namespace = os.path.splitext(basename)[0]
+            if os.path.exists(filename):
+                return filename, path, basename, namespace
+            outp("Error: File '%s' missing" % basename)
+        else:
+            filename = os.path.realpath(os.path.join(path, filename))
+            path = os.path.dirname(filename)
+            basename = os.path.basename(filename)
+            namespace = os.path.splitext(basename)[0]
+            if os.path.exists(filename):
+                return filename, path, basename, namespace
+            outp("Error: File '%s' missing" % filename)
+        sys.exit(-1)
+    
+    def expand_macro(self, match, filename, lineno, line):
+        name = match.group(1)
+        params = match.group(2).split()
+        num_param = len(params)
+        if name not in self.dMacros:
+             self.error(filename, lineno, "Unknown macro")
+        if num_param != self.dMacros[name][0]:
+             self.error(filename, lineno, "Invalid number of parameters")
+        tokens = []
+        for item in self.dMacros[name][1:]:
+            if num_param > 0: item = item.replace("%1", params[0])
+            if num_param > 1: item = item.replace("%2", params[1])
+            if num_param > 2: item = item.replace("%3", params[2])
+            if num_param > 3: item = item.replace("%4", params[3])
+            if num_param > 4: item = item.replace("%5", params[4])
+            if num_param > 5: item = item.replace("%6", params[5])
+            if num_param > 6: item = item.replace("%7", params[6])
+            if num_param > 7: item = item.replace("%8", params[7])
+            if num_param > 8: item = item.replace("%9", params[8])
+            tokens.append((filename, lineno, item))
+        return tokens  
+        
+    def load_file(self, path, filename, lNameSpaces=[]):
+        """
+        Read ASM file with all include files.
+        Function is called recursively to handle includes.
+        The file name is used as name space for all labels and aliases.
+        Return a token list with (namespace, line-no, line-string) 
+        """
+        filename, path, basename, namespace = self.find_file(path, filename)
+        macro_name = False
+    
+        lToken = []
+    
+        if namespace not in lNameSpaces:
+            lNameSpaces.append(namespace)
+            self.namespace = namespace
+    
+            lToken.append((basename, 0, ""))
+            lToken.append((basename, 0, ";############ File: %s ############" % basename))
+            lineno = 0
+            try:
+                lines = open(filename).readlines()
+            except:
+                self.error(basename, lineno, "Invalid file format")
+            for idx, line in enumerate(lines):
+                lineno += 1
+                clean_line = line.strip()
+                # include files
+                m = reINCL.match(clean_line)
+                if m:
+                    fname = m.group(1)
+                    outp(" - import %s..." % os.path.basename(fname))
+                    t, _ = self.load_file(path, fname, lNameSpaces)
+                    lToken.extend(t)
+                    continue
+                # end of macro definition
+                if macro_name and startswith(clean_line, "$endmacro"):
+                    macro_name = False
+                # code of macro definition
+                elif macro_name:
+                    self.dMacros[macro_name].append(line)
+                # start of macro definition
+                elif startswith(clean_line, "$macro"):
+                    m = reMACRO_DEF.match(clean_line)
+                    if m:
+                        macro_name = m.group(1)
+                        num_param = int(m.group(2) or "0")
+                        self.dMacros[macro_name] = [num_param]
+                        lToken.append((basename, lineno, "; " + line))
+                    else:
+                        self.error(basename, lineno, "Invalid macro syntax")
+                else:
+                    # expand macro 
+                    m = reMACRO.match(clean_line)
+                    if m:
+                        lToken.extend(self.expand_macro(m, basename, lineno, line))
+                        continue
+                    lToken.append((basename, lineno, line))
+        return lToken, lNameSpaces
 
 class AsmBase(object):
+    def __init__(self, lNameSpaces):
+        self.lNameSpaces = lNameSpaces
+
     def error(self, err):
-        fname = lFileList[self.token[FILEREF]]
+        filename = self.token[FILENAME]
         lineno = self.token[LINENUM]
-        print("Error in file '%s', line %u:\n%s" % (fname, lineno, err))
+        outp("Error in file %s(%u):\n%s" % (filename, lineno, err))
         sys.exit(-1)
     
     def prepare_opcode_tables(self):
@@ -154,9 +251,9 @@ class AsmBase(object):
                     return int(s[2:], base=16) % 1024
                 return int(s[1:], base=10) % 1024
             else:
-                self.error("Invalid operand in '%s'" % self.line)
+                self.error("Invalid oprnd in '%s'" % self.line)
         except:
-            self.error("Invalid operand in '%s'" % self.line)
+            self.error("Invalid oprnd in '%s'" % self.line)
             
     def value(self, s):
         try:
@@ -168,55 +265,69 @@ class AsmBase(object):
                 return int(s, base=8)
             return int(s, base=10)
         except:
-            self.error("Invalid operand in '%s'" % self.line)
+            self.error("Invalid oprnd in '%s'" % self.line)
 
-    def add_label_prefix(self, label):
-        if label.islower(): # local label
-            return "%u_%s" % (self.labelprefix, label)
-        return label
+    def expand_ident(self, namespace, ident):
+        """
+        Expand an identifier like 'foo' to:
+                                   foo.main
+                         namespace.foo
+        depending on foo is a valid namespace or not. 
+        """
+        pieces = ident.split(".")
+        if len(pieces) == 1:
+            if ident in self.lNameSpaces:
+                return ident + ".start"
+            else:
+                return namespace + "." + ident
+            ident
+        elif len(pieces) == 2:
+            if pieces[0] in self.lNameSpaces:
+                return ident
+        return None
     
-    def rmv_label_prefix(self, label):
-        if label.islower(): # local label
-            return label.split("_", 1)[1]
-        return label
-    
-    def add_sym_addr(self, label, addr):
-        if not label.islower(): # global label
-            self.labelprefix += 1
-            if label in self.dSymbols:
-                self.error("Label '%s' used twice" % label)
-            self.dSymbols[label] = addr
+    def add_aliase(self, left_val, right_val):
+        left_val = self.expand_ident(self.namespace, left_val)
+        if left_val:
+            self.dAliases[left_val] = right_val
         else:
-            label = self.add_label_prefix(label)
-            if label in self.dSymbols:
-                self.error("Label '%s' used twice" % label)
-            self.dSymbols[label] = addr
+            self.error("Inv. left value in '%s'" % self.line)
+
+    def add_symbol(self, label, addr):
+        label2 = self.expand_ident(self.namespace, label)
+        if label2:
+            if label != "start" and label2 in self.dSymbols:
+                self.error("Label '%s' used twice in\n'%s'" % (label, self.line))
+            self.dSymbols[label2] = addr
+        else:
+            self.error("Inv. label value in '%s'" % self.line)
             
-    def get_sym_addr(self, label):
-        if not label.islower(): # global label
-            self.labelprefix += 1
-            if label in self.dSymbols:
-                return self.dSymbols[label]
-        else:
-            label2 = self.add_label_prefix(label)
-            if label2 in self.dSymbols:
-                return self.dSymbols[label2]
+    def add_default_label(self, line, addr):
+        words = line.split()
+        if words[0] == ".code":
+            label = self.namespace + ".start"
+            if label not in self.dSymbols:
+                self.dSymbols[label] = addr
+            
+    def get_symbol_addr(self, label):
+        label2 = self.expand_ident(self.namespace, label)
+        if label2 in self.dSymbols:
+            return self.dSymbols[label2]
         if self.ispass2:
-            self.error("Invalid/unknown operand in '%s'" % self.line)
+            self.error("Invalid oprnd in '%s'" % self.line)
         return 0
             
     def aliases(self, s):    
-        prefix = str(self.token[FILEREF])
+        namespace = os.path.splitext(self.token[FILENAME])[0]
+        
         if s[0] == "#":
-            if prefix+s[1:] in self.dAliases:
-                s = "#" + self.dAliases[prefix+s[1:]]
-            elif s[1:] in self.dAliases:
-                s = "#" + self.dAliases[s[1:]]
+            ident = self.expand_ident(namespace, s[1:])
+            if ident in self.dAliases:
+                return "#" + self.dAliases[ident]
         else:
-            if prefix+s in self.dAliases:
-                s = self.dAliases[prefix+s]
-            elif s in self.dAliases:
-                s = self.dAliases[s]
+            ident = self.expand_ident(namespace, s)
+            if ident in self.dAliases:
+                return self.dAliases[ident]
         return s
 
 
@@ -229,10 +340,10 @@ class AsmPass1(AsmBase):
     - return the enriched token list (file-ref, line-no, line-string, line-type, 
                                       address, instr-size, instr-words)
     """
-    def __init__(self):
+    def __init__(self, lNameSpaces):
+        AsmBase.__init__(self, lNameSpaces)
         self.segment_type = CODETYPE
         self.addr = 0
-        self.labelprefix = 0
         self.dSymbols = {}
         self.dAliases = {}
         self.prepare_opcode_tables()
@@ -257,13 +368,13 @@ class AsmPass1(AsmBase):
         return False
 
     def tokenize(self, size, words):
-        token = (self.token[FILEREF], self.token[LINENUM], self.token[LINESTR],
-                 self.segment_type, self.labelprefix, self.addr, size, words)
+        token = (self.token[FILENAME], self.token[LINENUM], self.token[LINESTR],
+                 self.segment_type, self.addr, size, words)
         self.addr += size
         return token
        
     def comment(self):
-        return (self.token[FILEREF], self.token[LINENUM], self.token[LINESTR],
+        return (self.token[FILENAME], self.token[LINENUM], self.token[LINESTR],
                 COMMENT, 0, 0, 0, [])
 
     def operand_size(self, s):
@@ -274,7 +385,7 @@ class AsmPass1(AsmBase):
         if s[0] in ["#", "+", "-"]: return 1
         if s in self.dOperands: return 0
         return 1
-        
+    
     def operand_correction(self, words):
         # add the "immediate" sign to all jump instructions
         if words[0] in JumpInst:
@@ -290,37 +401,38 @@ class AsmPass1(AsmBase):
         list_get = lambda l, idx: l[idx] if len(l) > idx else None
             
         line = self.token[LINESTR]
+        self.namespace = os.path.splitext(self.token[FILENAME])[0]
         line = line.split(";")[0].rstrip()
         self.line = line.strip() # for error messages
         line = line.replace(",", " ")
         line = line.replace("\t", "    ")
-        if line.strip() == "": 
+        line = line.strip()
+        if line == "": 
             return self.comment()
         words = line.split()
         # assembler directive
         if self.directive(line):
+            self.add_default_label(line, self.addr)
             return self.comment()
         # aliases
         m = reEQUALS.match(line)
         if m:
-            self.dAliases[m.group(1)] = m.group(2)
-            prefix = str(self.token[FILEREF])
-            self.dAliases[prefix + m.group(1)] = m.group(2)
+            self.add_aliase(m.group(1), m.group(2))
             return self.comment()
         # address label
         m = reLABEL.match(line)
         if m:
-            self.add_sym_addr(m.group(1), self.addr)
+            self.add_symbol(m.group(1), self.addr)
             if len(words) == 1:
                 return self.comment()
             words = words[1:]
             line = line.split(" ", 1)[1]
         # text segment
         if self.segment_type == WTEXTTYPE:
-            s = self.string(line.strip())
+            s = self.string(line)
             return self.tokenize(len(s), s)
         if self.segment_type == BTEXTTYPE:
-            s = self.byte_string(line.strip())
+            s = self.byte_string(line)
             return self.tokenize(len(s), s)
         # data segment
         if self.segment_type == DATATYPE:
@@ -338,12 +450,10 @@ class AsmPass1(AsmBase):
             words = self.operand_correction(words)
             size = 1 + self.operand_size(list_get(words, 1)) + self.operand_size(list_get(words, 2))
             if size > 2:
-                self.error("Invalid syntax '%s' (number of words > 2)" % self.line)
+                self.error("Invalid syntax in '%s'\n(number of words > 2)" % self.line)
         return self.tokenize(size, words)    
 
-    def run(self, fname):
-        path = os.path.dirname(fname)
-        lToken = load_file(path, fname)
+    def run(self, lToken):
         lNewToken = []
         for self.token in lToken:
             token = self.decode()
@@ -358,11 +468,12 @@ class AsmPass2(AsmBase):
     - return the enriched token list (file-ref, line-no, line-string, line-type, 
                                       address, instr-size, instr-words, opcodes)
     """
-    def __init__(self, dSymbols, dAliases):
-        self.labelprefix = 0
+    def __init__(self, lNameSpaces, dSymbols, dAliases):
+        AsmBase.__init__(self, lNameSpaces)
         self.ispass2 = True
         self.dSymbols = dSymbols
         self.dAliases = dAliases
+        self.lNameSpaces = lNameSpaces
         self.prepare_opcode_tables()
 
     def check_operand_type(self, instr, opnd1, opnd2):
@@ -371,11 +482,11 @@ class AsmPass2(AsmBase):
         if words[1] != "-":
             validOpnds = globals()[words[1]]
             if opnd1 != None and Operands[opnd1] not in validOpnds:
-                self.error("Invalid operand1 type in '%s'" % self.line)
+                self.error("Invalid operand1 type in\n'%s'" % self.line)
         if words[2] != "-":
             validOpnds = globals()[words[2]]
             if opnd2 != None and Operands[opnd2] not in validOpnds:
-                self.error("Invalid operand2 type in '%s'" % self.line)
+                self.error("Invalid operand2 type in\n'%s'" % self.line)
     
     def operand(self, s):
         if not s: return 0, None
@@ -397,41 +508,41 @@ class AsmPass2(AsmBase):
             return Operands.index("REL"), offset
         m = reSTACK.match(s)
         if m: return Operands.index("[SP+n]"), self.value(m.group(1))
-        if s[0] == "#": return Operands.index("IMM"), self.get_sym_addr(s[1:]) 
+        if s[0] == "#": return Operands.index("IMM"), self.get_symbol_addr(s[1:]) 
         if s[0] in ["+", "-"]:
-            dst_addr = self.get_sym_addr(s[1:])
+            dst_addr = self.get_symbol_addr(s[1:])
             src_addr = self.token[ADDRESS]  
             offset = (0x10000 + dst_addr - src_addr - 2) & 0xFFFF
             return Operands.index("REL"), offset
-        return Operands.index("IND"), self.get_sym_addr(s) 
+        return Operands.index("IND"), self.get_symbol_addr(s) 
         
     def get_opcode(self, instr):
         if instr not in self.dOpcodes:
-            self.error("Invalid instruction in '%s'" % self.line)
+            self.error("Invalid opcode in '%s'" % self.line)
         opc1 = self.dOpcodes[instr]
         num_opnds = 2 - Opcodes[opc1].count("-") 
         num_has = len(self.token[INSTRWORDS]) - 1
         if num_opnds != num_has:
-            self.error("Instruction should have %u operand(s), %u given" % (num_opnds, num_has))
+            self.error("Invalid oprnd in '%s'" % self.line)
         return opc1 
     
     def tokenize(self, code):
-        token = (self.token[FILEREF], self.token[LINENUM], self.token[LINESTR],
-                 self.token[LINETYPE], self.token[LABELPREFIX], self.token[ADDRESS], 
+        token = (self.token[FILENAME], self.token[LINENUM], self.token[LINESTR],
+                 self.token[LINETYPE], self.token[ADDRESS], 
                  self.token[INSTRSIZE], self.token[INSTRWORDS], code)
         return token
 
     def decode(self):
         line = self.token[LINESTR]
+        self.namespace = os.path.splitext(self.token[FILENAME])[0]
         self.line = line.split(";")[0].strip() # for error messages
         list_get = lambda l, idx: l[idx] if len(l) > idx else None
         instr = list_get(self.token[INSTRWORDS], 0)
         oprnd1 = list_get(self.token[INSTRWORDS], 1)
         oprnd2 = list_get(self.token[INSTRWORDS], 2)
-        self.labelprefix = self.token[LABELPREFIX]
 
         if instr not in self.dOpcodes:
-             self.error("Invalid instruction in '%s'" % self.line)
+             self.error("Invalid opcode in '%s'" % self.line)
         opc1 = self.get_opcode(instr)
         if oprnd1 and opc1 < 4:
             num = self.const_val(oprnd1)
@@ -474,28 +585,30 @@ def locater(lToken):
         if token[LINETYPE] == CODETYPE:
             addr = token[ADDRESS] - start
             for idx, val in enumerate(token[OPCODES]):
-                if mem[addr + idx] != -1: print("Warning: Memory location conflict at $%04X" % (addr + idx))
+                if mem[addr + idx] != -1: outp("Warning: Mem. loc. conflict at $%04X" % (addr + idx))
                 mem[addr + idx] = val
         elif token[LINETYPE] in [BTEXTTYPE, WTEXTTYPE]:
             addr = token[ADDRESS] - start
             for idx, val in enumerate(token[OPCODES]):
-                if mem[addr + idx] != -1: print("Warning: Memory location conflict at $%04X" % (addr + idx))
+                if mem[addr + idx] != -1: outp("Warning: Mem. loc. conflict at $%04X" % (addr + idx))
                 mem[addr + idx] = val
         elif token[LINETYPE] == DATATYPE:
             addr = token[ADDRESS] - start
             for idx, val in enumerate(token[OPCODES]):
-                if mem[addr + idx] != -1: print("Warning: Memory location conflict at $%04X" % (addr + idx))
+                if mem[addr + idx] != -1: outp("Warning: Mem. loc. conflict at $%04X" % (addr + idx))
                 mem[addr + idx] = val
     return start, mem, end-1
     
-def list_file(fname, lToken):
+def list_file(path, fname, lToken):
     """
     Generate a list file
     """
     from time import localtime, strftime
-    t = strftime("%d-%b-%Y %H:%M:%S", localtime())
+    fname = os.path.splitext(fname)[0] + ".lst"
+    outp(" - write %s..." % fname)
+    t = strftime("%d-%b-%y %H:%M:%S", localtime())
     lOut = []
-    lOut.append("VM16 ASSEMBLER v%s       File: %-18s    Date: %s" % (VERSION, fname, t))
+    lOut.append("VM16ASM v%s  %s  %s" % (VERSION, fname, t))
     lOut.append("")
     for token in lToken:
         if token[LINETYPE] == COMMENT:
@@ -518,52 +631,49 @@ def list_file(fname, lToken):
             cmnt = "%s" % token[LINESTR].rstrip()
             lOut.append("%s" % cmnt)
             lOut.append("%s: %s" % (addr, code))
-            
-            
-    dname = os.path.splitext(fname)[0] + ".lst"
-    print(" - write %s..." % dname)
-    open(dname, "wt").write("\n".join(lOut))
+    open(path + fname, "wt").write("\n".join(lOut))
     
-def bin_file(fname, mem, fillword=0):
+def bin_file(path, fname, mem, fillword=0):
     """
     Generate a text file with hex values for import into Minetest 
     """
-    dname = os.path.splitext(fname)[0] + ".bin"
-    print(" - write %s..." % dname)
+    fname = os.path.splitext(fname)[0] + ".bin"
+    outp(" - write %s..." % fname)
     lOut = []
     for idx, v in enumerate(mem):
         lOut.append("%04X" % (v if v != -1 else 0))
         if idx > 0 and idx % 8 == 0:
             lOut[-1] = "\n" + lOut[-1]
-    open(dname, "wt").write(" ".join(lOut))
+    open(path + fname, "wt").write(" ".join(lOut))
     
-def tbl_file(fname, mem, fillword=0):
+def tbl_file(path, fname, mem, fillword=0):
     """
     Generate a text block to be used as constant table for testing purposes
     """
-    dname = os.path.splitext(fname)[0] + ".tbl"
-    print(" - write %s..." % dname)
+    fname = os.path.splitext(fname)[0] + ".tbl"
+    outp(" - write %s..." % fname)
     lOut = []
     for idx, v in enumerate(mem):
         lOut.append("0x%04X" % (v if v != -1 else 0))
         if idx > 0 and idx % 8 == 0:
             lOut[-1] = "\n" + lOut[-1]
-    open(dname, "wt").write(", ".join(lOut))
+    open(path + fname, "wt").write(", ".join(lOut))
     
-def com_file(fname, start_addr, mem):
+def com_file(path, fname, start_addr, mem):
     """
     Generate a binary COM file with for J/OS
     """
     if start_addr == 0x100:
-        dname = os.path.splitext(fname)[0] + ".com"
-        print(" - write %s..." % dname)
+        fname = os.path.splitext(fname)[0] + ".com"
+        outp(" - write %s..." % fname)
         size = len(mem)
         s = struct.pack("<" + size*'H', *mem)
-        open(dname, "wb").write(s)
+        open(path + fname, "wb").write(s)
         return size
-    print("Error: Start address must be $100 (hex)!")
+    outp("Error: Start address must be $100 (hex)!")
+    sys.exit(-1)
     
-def h16_file(fname, start_addr, last_addr, mem):
+def h16_file(path, fname, start_addr, last_addr, mem):
     """
     Generate a H16 file for import into Minetest 
     """
@@ -582,8 +692,8 @@ def h16_file(fname, start_addr, last_addr, mem):
         lOut.append(":%X%04X00%s" % (len(row), addr, s))
         return len(row)
              
-    dname = os.path.splitext(fname)[0] + ".h16"
-    print(" - write %s..." % dname)
+    fname = os.path.splitext(fname)[0] + ".h16"
+    outp(" - write %s..." % fname)
 
     idx = 0
     ROWSIZE = 8
@@ -602,45 +712,81 @@ def h16_file(fname, start_addr, last_addr, mem):
                 i1 = i2
         idx += ROWSIZE
     lOut.append(":00000FF")
-    open(dname, "wt").write("\n".join(lOut))
+    open(path + fname, "wt").write("\n".join(lOut))
     return size
-    
-def assembler(fname):
-    print("VM16 ASSEMBLER v%s (c) 2019-2020 by Joe\n" % VERSION)
-    print(" - read %s..." % fname)
-    a = AsmPass1()
-    lToken = a.run(fname)
-    a = AsmPass2(a.dSymbols, a.dAliases)
-    lToken = a.run(lToken)
-    list_file(fname, lToken)
-    start_addr, mem, last_addr = locater(lToken)
-    if "-com" in sys.argv:
-        size = com_file(fname, start_addr, mem)
-    else:
-        size = h16_file(fname, start_addr, last_addr, mem)
-    
-    if "-tbl" in sys.argv: tbl_file(fname, mem)
-    
-    print("\nSymbol table:")
+ 
+def symbol_table(dSymbols):
+    outp("\nSymbol table:")
     items = []
-    for key, addr in a.dSymbols.items():
-        if not key.islower():
-            items.append((key, addr))
+    for key, addr in dSymbols.items():
+        items.append((key, addr))
     items.sort(key=lambda item: item[1])
     for item in items:
-        print(" - %-16s = %04X" % (item[0], item[1]))
-    print("")
- 
-    print("Code start address: $%04X" % start_addr)
-    print("Last used address:  $%04X" % last_addr)
-    print("Code size: $%04X/%u words\n" % (size, size))
+        outp(" - %-24s = %04X" % (item[0], item[1]))
+
+def debug_out(lToken, dSymbols, dAliases):    
+    for tok in lToken:
+        print(str(tok))
+    print(dSymbols)
+    print(dAliases)
+       
+def assembler():
+    global DEST_PATH
+
+    ## server side files need a special path/name handing
+    if "--srv" in sys.argv:
+        DEST_PATH = sys.argv[2]
+        fname = sys.argv[3]
+    else:
+        DEST_PATH = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(sys.argv[1]))) + "/"
+        fname = os.path.basename(sys.argv[1])
+
+    outp("VM16 ASSEMBLER v%s (c) 2019-2021 by Joe\n" % VERSION, True)
+    outp(" - read %s..." % fname)
+    
+    t = Tokenizer()
+    lToken, lNameSpaces = t.load_file(DEST_PATH, fname)
+    #debug_out(lToken, {}, {})
+    #sys.exit(0)
+    
+    a = AsmPass1(lNameSpaces)
+    lToken = a.run(lToken)
+    #debug_out(lToken, a.dSymbols, a.dAliases)
+    
+    a = AsmPass2(lNameSpaces, a.dSymbols, a.dAliases)
+    lToken = a.run(lToken)
+
+    if "--lst" in sys.argv:
+        list_file(DEST_PATH, fname, lToken)
+        
+    start_addr, mem, last_addr = locater(lToken)
+    
+    if "--com" in sys.argv:
+        size = com_file(DEST_PATH, fname, start_addr, mem)
+    else:
+        size = h16_file(DEST_PATH, fname, start_addr, last_addr, mem)
+    
+    if "--tbl" in sys.argv: tbl_file(DEST_PATH, fname, mem)
+    if "--sym" in sys.argv: symbol_table(a.dSymbols)
+    
+    outp("")
+    outp("Code start address: $%04X" % start_addr)
+    outp("Last used address:  $%04X" % last_addr)
+    outp("Code size: $%04X/%u words\n" % (size, size))
+    return 0
 
 def main():
-    if len(sys.argv) < 2:
-        print("Syntax: vm16asm <asm-file>")
-        print("Options:")
-        print(" -tbl    generate a table like file in addition")
-        print(" -com    generate a COM file instead of a H16 file")
+    if len(sys.argv) < 2 or ("--srv" in sys.argv and len(sys.argv) < 4):
+        outp("Syntax: vm16asm <asm-file> <options>")
+        outp("Options:")
+        outp(" --com  Generate COM file (not H16)")
+        outp(" --lst  Generate list file")
+        outp(" --sym  Print symbol table entries")
+        outp("or:")
+        outp(" -cls   Short for '--com --lst --sym'")
+        
         sys.exit(0)
-            
-    assembler(sys.argv[1])
+    
+    parameter()
+    assembler()
+

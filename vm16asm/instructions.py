@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 #
 # VM16 Assembler v1.0
-# Copyright (C) 2019 Joe <iauit@gmx.de>
+# Copyright (C) 2019-2021 Joe <iauit@gmx.de>
 #
 # This file is part of VM16.
 
@@ -25,8 +25,9 @@
 #  1.0.2  08-Dec-2020  Change syntax for sys instruction
 #  1.0.3  28-Dec-2020  Add export for COM files
 #  1.1.0  03-Jan-2021  Add 'bkr' opcode
+#  1.2.0  05-Jan-2021  Change local/global label handling
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 
 
 #
