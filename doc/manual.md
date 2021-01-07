@@ -197,7 +197,7 @@ $endmacro
 
 `num_of_params` specifies the number parameters, `macro_name` specifies the name of the macro.
 
-The macro is invoked by using the macro name, starting with the '$' character, along with the necessary parameters. 
+The macro is invoked by using the macro name, along with the necessary parameters. 
 
 When you need to use some sequence of instructions many  times in a program, you can put those instructions in a macro and use it instead of writing the instructions all the time.
 
@@ -223,9 +223,9 @@ start:
     move  A, #NEWLINE
     sys   #$14
 
-    $read_tape TAPE1 1		; <------- use the macro
-    $read_tape TAPE2 2		; <------- use the macro
-    $read_tape TAPE3 3		; <------- use the macro
+    read_tape TAPE1 1		; <------- use the macro
+    read_tape TAPE2 2		; <------- use the macro
+    read_tape TAPE3 3		; <------- use the macro
 
     move  A, #READY
     sys   #$14

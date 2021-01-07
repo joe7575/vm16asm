@@ -36,7 +36,7 @@ reREL  = re.compile(r"([\+\-])(\$?[0-9A-Fa-fx]+)$")
 reSTACK = re.compile(r"\[SP\+(\$?[0-9A-Fa-fx]+)\]$")
 reINCL =  re.compile(r'^\$include +"(.+?)"')
 reMACRO_DEF = re.compile(r'^\$macro +([A-Za-z_][A-Za-z_0-9\.]+) *([0-9]?)$')
-reMACRO =  re.compile(r'^\$([A-Za-z_][A-Za-z_0-9\.]+) *(.*)$')
+reMACRO =  re.compile(r'^([A-Za-z_][A-Za-z_0-9\.]+) *(.*)$')
 reEQUALS = re.compile(r"^([A-Za-z_][A-Za-z_0-9\.]+) *= *(\S+)")
 rePARAM = re.compile(r'^\-[cls]{1,3}')
 
@@ -187,7 +187,7 @@ class Tokenizer(object):
                 else:
                     # expand macro 
                     m = reMACRO.match(clean_line)
-                    if m:
+                    if m and m.group(1) in self.dMacros:
                         lToken.extend(self.expand_macro(m, basename, lineno, line))
                         continue
                     lToken.append((basename, lineno, line))

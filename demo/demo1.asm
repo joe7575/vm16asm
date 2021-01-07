@@ -18,7 +18,7 @@ START1:             ; global label
 exit:   jump  1000
         jump  $1000
         
-        $ifeq var1 #10 TEXT1
+        ifeq var1 #10 TEXT1
         halt
 end:        
         brk   #$10
