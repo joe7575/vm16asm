@@ -214,10 +214,11 @@ class AsmBase(object):
 
     def string(self, s):
         lOut =[]
-        s = s.replace("\\0", "\0")
-        s = s.replace("\\n", "\n")
         if s[0] == '"' and s[-1] == '"':
-            for c in s[1:-1]:
+            s = s.replace("\\0", "\0")
+            s = s.replace("\\n", "\n")
+            s = s.replace('"', "")
+            for c in s:
                 lOut.append(ord(c))
         return lOut
     
@@ -354,7 +355,7 @@ class AsmPass1(AsmBase):
             self.segment_type = DATATYPE
             return True
         elif words[0] == ".code":
-            self.segment_type =CODETYPE
+            self.segment_type = CODETYPE
             return True
         elif words[0] == ".text":
             self.segment_type = WTEXTTYPE
@@ -429,10 +430,10 @@ class AsmPass1(AsmBase):
             line = line.split(" ", 1)[1]
         # text segment
         if self.segment_type == WTEXTTYPE:
-            s = self.string(line)
+            s = self.string(line.strip())
             return self.tokenize(len(s), s)
         if self.segment_type == BTEXTTYPE:
-            s = self.byte_string(line)
+            s = self.byte_string(line.strip())
             return self.tokenize(len(s), s)
         # data segment
         if self.segment_type == DATATYPE:

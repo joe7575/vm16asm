@@ -1,8 +1,10 @@
-# Assembler Manual
+# Macro Assembler Manual
+
+
 
 ## Introduction
 
-The Assembler `vm16asm`  is used to translate assembly code into a H16 file as in the following example. This assembler is not available ingame, it must be installed on your PC (Linux, macOS, and Windows). The generated H16 file can then be transfered into the game via copy/paste.
+The Assembler `vm16asm`  is used to translate VM16 assembly code into `.h16` or `.com` files, used for the mod [pdp13](https://github.com/joe7575/pdp13). This assembler is available in-game, but can be installed on your PC (Linux, macOS, and Windows) in addition. Generated `.h16` files can then be transfered into the game via copy/paste.
 
 Example "7segment.asm":
 
@@ -16,13 +18,13 @@ Example "7segment.asm":
 loop:
     add  B, #01
     and  B, #$0F    ; values from 0 to 15
-    out #00, A
+    out  #00, A
     nop
     nop
     jump loop
 ```
 
-H16 file "7segment.h16":
+`.h16` file "7segment.h16":
 
 ```
 :20000010000000D
@@ -31,15 +33,19 @@ H16 file "7segment.h16":
 :00000FF
 ```
 
-The H16 file includes also address information so that the code can be located to the predefined VM16 memory address.
+The `.h16` file includes also address information so that the code can be located to the predefined VM16 memory address.
 
 If installed properly, you can directly type:
 
 ```
-vm16asm <asm-file>
+vm16asm <asm-file> <option>
 ```
 
+Options are:
 
+- `--com`  to generate a `.com` file instead of a `.h16` file
+- `--sym` to output all values from the symbol table
+- `--lst` to generate a `.lst` file in addition
 
 
 
@@ -66,69 +72,85 @@ Comments are used for addition documentation, or to disable some lines of code. 
 
 ## Labels
 
-Labels allow to implement a jump to a dedicated position without knowing the correct memory address. 
-In the example above the instruction `out  #8, A` will be executed after the instruction `jump LOOP`.  
+Labels allow to implement a jump/call/branch to a dedicated position without knowing the correct memory address. 
+In the example above the instruction `out  #8, A` will be executed after the instruction `jump loop`.  
 
 For labels  the characters 'A' - 'Z', 'a' - 'z',  '_' and '0' - '9' are allowed ('0' - '9' not as first character) following by the ':' sign.
 
 Labels can be used in two different ways:
 
-- `jump  LOOP` is translated into an instruction with an absolute memory address
-- `jump +LOOP` is translated into an instruction with a relative address (+/- some addresses), so that the code can be relocated to a different memory address
+- `jump  loop` is translated into an instruction with an absolute memory address
+- `jump +loop` is translated into an instruction with a relative address (+/- some addresses), so that the code can be relocated to a different memory address
 
-The assembler distinguishes two kinds of labels:
+To be able to distinguish between local and external labels, the `.asm` file name is used as prefix for labels. Lets say, you want to call a function from your file `example.asm`:
 
-- file local labels,  written completely in lowercase letters, e.g. `loop:`
-- globally valid labels, written with at least one capital letter, e.g. `Loop:`
+- `call foo` will jump to a file local label
+- `call example.foo` will also jump to a file local label
+- `call strcpy.foo` will jump to a label in the file `strcpy.asm`
 
-The difference between "file local" and "global" will be explained in the chapter "Include Instruction".
+If you want to call the external function `strcpy`, the following alternatives are valid:
+
+- `call strcpy` is the short form
+- `call strcpy.start` is the normal form 
+
+Both variants will point to the beginning of the code segment or the the explicit label `start` in `strcpy.asm`
+
+See also chapter "Include Instruction".
 
 
 
 ## Assembler Directives
 
-Assembler directives are used to distinguish between code and text segments, or to specify a memory address for following code blocks.
+Assembler directives are used to distinguish between code, data, and text segments, or to specify a memory address for following code blocks.
 
-Here an example:
+Here a (not useful) example:
 
 ```assembly
-; Hello world for the Telewriter v1.0
-
+        .org $100
         .code
-START:  move    A, #TEXT
+start:  move    A, #text1
         sys     #0
         halt
+        
+        .data
+var1:	100
+var2:   $2123
 
-        .org $100
+        .org $200
         .text
-TEXT:   "Hello "
-        "World\0"
+text1:  "Hello World\0"
 ```
 
-- `.code` marks the start of a code block and is optional at the beginning of a program (code is default)
-
-- `.text` marks the start of a text block with "..." strings. `\0` is equal to the value zero and here used to terminate the string for the `sys #0` command.
-- `.org` defines a memory start address. In the example above, the text characters will be stored at address 100hex and the following.
+- `.org` defines the memory start address for the locater. In the example above, the code will start at address 100 (hex).
+- `.code` marks the start of a code block and is optional at the beginning of a program (code is default).
+- `.data` marks the start of a data/variables block.  Variables have a name and a start value. Variables have always the size of one word.
+- `.text` marks the start of a text block with "..." strings. `\0` is equal to the value zero and has always be used to terminate the string.
+- `.ctext` marks the start of a compressed text block (two characters in one word). This is not used in the example above but allows a better packaging of constant strings. It depends on your output device, if  compressed strings are supported.
 
 The assembler output for the example above looks like:
 
 ```
-VM16 ASSEMBLER v1.0.2 (c) 2019-2020 by Joe
- - read /home/joachim/minetest5/mods/pdp13/examples/telewriter.asm...
- - write /home/joachim/minetest5/mods/pdp13/examples/telewriter.lst...
- - write /home/joachim/minetest5/mods/pdp13/examples/telewriter.h16...
+VM16 ASSEMBLER v1.2.0 (c) 2019-2021 by Joe
+
+ - read demo2.asm...
+ - write demo2.h16...
+
 Symbol table:
- - START            = 0000
- - TEXT             = 0100
-Code start address: $0000
-Code size: $010C/268 words
+ - demo2.start              = 0100
+ - demo2.var1               = 0104
+ - demo2.var2               = 0105
+ - demo2.text1              = 0200
+
+Code start address: $0100
+Last used address:  $020B
+Code size: $0012/18 words
 ```
 
 
 
 ## Symbols
 
-To make you program better readable, the assembler support constant or symbol definitions.
+To make you program better readable, the assembler supports constant or symbol definitions.
 
 ```assembly
 INP_BUFF = $40      ; 64 chars
@@ -146,7 +168,7 @@ Of course, symbols must be defined before they can be used.
 
 ## Include Instruction
 
-To bind several asm files to one larger project, the assembler allows to import other files with the `$include` instruction:
+To bind several `.asm` files to one larger project, the assembler allows to import other files with the `$include` instruction:
 
 ```assembly
 $include "itoa.asm"
@@ -154,6 +176,60 @@ $include "itoa.asm"
 
 This allows to use code or call functions from other files by means of globally valid labels (see chap. Labels).
 
-Locally valid labels from other files are not visible and therefore are typically used to build loops.
-Globally valid labels from other files are visible and therefore typically used as function start addresses.
+The imported code will be inserted at the position of the `$include` line.  Therefore, put all your `$include` lines at the and of your `.asm` file.
+
+
+
+## Macros
+
+Using macros is a way of ensuring modular programming in assembly language.
+
+- A macro is a sequence of instructions, assigned by a name and could be used anywhere in the program.
+- Macros are defined with `$macro` and `$endmacro` directives.
+
+The Syntax for macro definition:
+
+```
+$macro macro_name  num_of_params
+   <instructions>
+$endmacro
+```
+
+`num_of_params` specifies the number parameters, `macro_name` specifies the name of the macro.
+
+The macro is invoked by using the macro name, starting with the '$' character, along with the necessary parameters. 
+
+When you need to use some sequence of instructions many  times in a program, you can put those instructions in a macro and use it instead of writing the instructions all the time.
+
+Here an extract from `install.asm` (J/OS installation program):
+
+```assembly
+$macro read_tape 2			; <------- start of the marco definition block
+    move  A, #%1			; <------- use of param 1
+    sys   #$14
+    call  input
+    move  A, #$500
+    sys   #5
+    move  B, #%2            ; <------- use of param 2
+    bze   A, error
+    move  B, #15
+    call  sleep
+$endmacro					; <------- end of the marco definition block
+
+start:
+    sys   #$10
+    move  A, #HELLO
+    sys   #$14
+    move  A, #NEWLINE
+    sys   #$14
+
+    $read_tape TAPE1 1		; <------- use the macro
+    $read_tape TAPE2 2		; <------- use the macro
+    $read_tape TAPE3 3		; <------- use the macro
+
+    move  A, #READY
+    sys   #$14
+
+    halt
+```
 
