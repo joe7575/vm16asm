@@ -204,8 +204,8 @@ When you need to use some sequence of instructions many  times in a program, you
 Here an extract from `install.asm` (J/OS installation program):
 
 ```assembly
-$macro read_tape 2			; <------- start of the marco definition block
-    move  A, #%1			; <------- use of param 1
+$macro read_tape 2          ; <------- start of the marco definition block
+    move  A, #%1            ; <------- use of param 1
     sys   #$14
     call  input
     move  A, #$500
@@ -214,7 +214,7 @@ $macro read_tape 2			; <------- start of the marco definition block
     bze   A, error
     move  B, #15
     call  sleep
-$endmacro					; <------- end of the marco definition block
+$endmacro                   ; <------- end of the marco definition block
 
 start:
     sys   #$10
@@ -223,9 +223,9 @@ start:
     move  A, #NEWLINE
     sys   #$14
 
-    read_tape TAPE1 1		; <------- use the macro
-    read_tape TAPE2 2		; <------- use the macro
-    read_tape TAPE3 3		; <------- use the macro
+    read_tape TAPE1 1       ; <------- use the macro
+    read_tape TAPE2 2       ; <------- use the macro
+    read_tape TAPE3 3       ; <------- use the macro
 
     move  A, #READY
     sys   #$14
