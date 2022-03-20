@@ -1,4 +1,4 @@
-# vm16asm - Assembler for the VM16 CPU
+# vm16asm - Assembler for the VM16 CPU [outdated]
 
 The Assembler `vm16asm`  is used to translate VM16 assembly code into `.h16`
 or `.com` files, used for the mod [pdp13](https://github.com/joe7575/pdp13).
